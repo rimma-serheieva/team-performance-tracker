@@ -51,7 +51,15 @@ def save_baseline(current_metrics):
     json.dump(existing, open(BASELINE_PATH, "w", encoding="utf-8"), indent=2)
 
 
-def run(events_path, drop_threshold=0.25, webhook_url=None, update_baseline=True):
+def week_label_for(events):
+    all_ts = [ts for stamps in events.values() for ts in stamps]
+    if not all_ts:
+        return "Week of (no data)"
+    start = min(all_ts).date()
+    return "Week of %s (latest available)" % start.isoformat()
+
+
+def run(events_path, target=100, drop_threshold=0.25, webhook_url=None, update_baseline=True):
     events = load_events(events_path)
     baseline = load_baseline()
 
@@ -63,19 +71,20 @@ def run(events_path, drop_threshold=0.25, webhook_url=None, update_baseline=True
         if flagged:
             drops[person] = pct
 
-    message = alerts.format_daily_summary(team_metrics, drops)
+    message = alerts.format_weekly_report(team_metrics, week_label_for(events), target, drops)
     alerts.send(message, webhook_url)
     if update_baseline:
         save_baseline(team_metrics)
-    return team_metrics, drops
+    return team_metrics, drops, message
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("events_csv")
+    ap.add_argument("--target", type=int, default=100)
     ap.add_argument("--drop-threshold", type=float, default=0.25)
     ap.add_argument("--no-baseline-update", action="store_true")
     args = ap.parse_args()
-    team_metrics, drops = run(args.events_csv, args.drop_threshold,
-                              update_baseline=not args.no_baseline_update)
+    team_metrics, drops, message = run(args.events_csv, args.target, args.drop_threshold,
+                                       update_baseline=not args.no_baseline_update)
     print("\n%d team members, %d flagged below baseline" % (len(team_metrics), len(drops)))

@@ -1,16 +1,17 @@
 # Team Performance Tracker
 
-Turn a raw log of task-completion timestamps into a daily Slack summary:
-who's on pace, who's genuinely slower than *their own* usual rate — and
-no false alarms from a flat team-wide bar that ignores how differently
-people actually work.
+Turn a raw log of task-completion timestamps into a weekly Slack summary:
+who hit their quota, who's genuinely behind — both against a flat team
+target and against *their own* usual pace — with no false alarms from a
+bar that ignores how differently people actually work.
 
-I built and ran a related automation (Make.com, with Slack alerts) for
-tracking my own team's throughput. This is an independent Python rebuild
-of the underlying logic on fully synthetic data — not an export of that
+I built and ran a related automation (Make.com, triggered daily, posting
+a weekly summary to Slack) that reads a sheet counting completed work per
+coordinator against a daily norm. This is an independent Python rebuild
+of that underlying logic on fully synthetic data — not an export of that
 scenario, and not a claim that this exact codebase ran in production.
 
-## Two decisions that aren't arbitrary
+## Three decisions that aren't arbitrary
 
 1. **The workday boundary isn't midnight.** Someone who starts at 21:00
    and finishes at 01:30 is having one session, not two half-days split
@@ -22,48 +23,54 @@ scenario, and not a claim that this exact codebase ran in production.
    longer than a break-length threshold are excluded before taking the
    median — which is also what makes the number useful: multiply it out
    and you get "this many on a full productive day," not just a count.
+3. **Two independent signals, not one.** A flat weekly target (`target:
+   100 rows`) answers "did they hit the number." A comparison against
+   their own baseline answers "did *they* slow down" — someone whose
+   normal pace is naturally below the team target shouldn't get flagged
+   every single week for being who they always are; someone whose normal
+   pace is comfortably above target can still genuinely slip. The two
+   checks catch different things and the report shows both.
 
-## Why compare each person to their OWN history, not a team average
+## Results — both signals actually firing, not just described
 
-A flat team-wide bar either nags the naturally slower person every
-single day, or never notices the naturally fast person actually
-slipping. Comparing someone to their own baseline catches a real
-slowdown regardless of where their normal pace sits.
-
-## Results — the alert actually firing, not just described
-
-Three synthetic team members, four days of activity. One (`Sam Park`)
-has a deliberately slower final day built into the demo data generator,
-specifically so the alert can be shown catching something real:
+Three synthetic team members, two full weeks. One (`Sam Park`) has a
+deliberately slower second week built into the demo data generator —
+fewer tasks *and* a slower pace — specifically so both signals can be
+shown catching the same real thing, independently:
 
 ```
-stage 1 — establish baseline from days 1-3:
-  Alex Rivera: 32/hr
-  Jordan Lee:  37/hr
-  Sam Park:    26/hr
-  (0 flagged — nothing to compare against yet)
+week 1 — establishes the baseline:
+  :red_circle: Behind     Sam Park:    96 rows (target: 100,  96.0%)
+  :white_check_mark: On Track  Alex Rivera: 112 rows (target: 100, 112.0%)
+  :white_check_mark: On Track  Jordan Lee:  128 rows (target: 100, 128.0%)
+  Team Total: 336 rows
 
-stage 2 — run day 4 against that baseline:
-  Alex Rivera: 32/hr   (unchanged)
-  Jordan Lee:  38/hr   (unchanged)
-  Sam Park:    10/hr   ⚠️ down 61% vs baseline
+week 2 — compared against that baseline:
+  :red_circle: Behind     Sam Park:     34 rows (target: 100,  34.0%)  ⚠️ down 62% vs own baseline
+  :white_check_mark: On Track  Alex Rivera: 108 rows (target: 100, 108.0%)
+  :white_check_mark: On Track  Jordan Lee:  131 rows (target: 100, 131.0%)
+  Team Total: 273 rows
 ```
 
-Alex and Jordan — whose pace didn't change — correctly get **no** alert.
-Only the person who actually slowed down does. That's the real test of
-a "compare to your own baseline" design: it has to stay quiet for normal
-day-to-day variation and only speak up for an actual drop.
+Alex and Jordan — whose pace didn't change — correctly get **no**
+baseline alert in either week, even though Alex's count moved around a
+little; that's normal variation, not a slowdown. Sam Park gets flagged
+by *both* signals in week 2, for the same real reason, independently
+computed. That agreement is the actual test of the design: a target-only
+report would have called Sam "behind" in week 1 too, which is true but
+not new information — the baseline comparison is what tells you
+something actually *changed*.
 
 ## Architecture
 
 ```
 tracker/
-├── metrics.py    workday boundary, throughput calculation, baseline comparison
-├── alerts.py      the Slack webhook — a single POST, no SDK
+├── metrics.py    workday boundary, throughput calc, target & baseline comparison
+├── alerts.py      formats the real Slack message style + the webhook POST
 └── report.py      reads events.csv, runs both, posts, updates the baseline
 tests/
 └── test_metrics.py   8 tests on hand-built timestamps, no demo-data dependency
-make_demo_data.py      generates the synthetic events (seeded, reproducible)
+make_demo_data.py      generates two synthetic weeks (seeded, reproducible)
 ```
 
 ## Running it
@@ -72,9 +79,9 @@ make_demo_data.py      generates the synthetic events (seeded, reproducible)
 python3 -m venv .venv && source .venv/bin/activate
 python -m unittest tests.test_metrics -v      # 8 tests, no setup needed
 
-python make_demo_data.py                       # writes data/events_history.csv + events_today.csv
-python -m tracker.report data/events_history.csv   # establishes the baseline
-python -m tracker.report data/events_today.csv     # compares today against it
+python make_demo_data.py                       # writes two weeks of synthetic events
+python -m tracker.report data/events_history.csv --target 100     # establishes the baseline
+python -m tracker.report data/events_this_week.csv --target 100   # compares this week against it
 ```
 
 Add your own `SLACK_WEBHOOK_URL` to `.env` for a real post; without one,
@@ -85,9 +92,9 @@ the exact message just prints instead.
 - `events.csv` has to already exist — this doesn't include a collector;
   in production that was a Make.com scenario reading from wherever the
   team's tasks are actually logged, not something this repo rebuilds.
-- A 25% drop threshold is a reasonable starting default, not a
-  universally correct one — the right number depends on how noisy a
-  given team's day-to-day pace naturally is.
+- A 25% drop threshold and a 100-row weekly target are reasonable demo
+  defaults, not universally correct ones — the right numbers depend on
+  the specific team and task.
 - No notion of task *difficulty* — ten easy tasks and ten hard ones count
   the same. A real deployment would need that nuance; this demo doesn't.
 

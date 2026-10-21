@@ -71,6 +71,17 @@ def throughput(timestamps, day_start_hour=DAY_START_HOUR, break_seconds=BREAK_SE
     }
 
 
+def status_vs_target(count, target):
+    """The simpler, real-world-facing metric: raw completed count against
+    a flat daily/weekly quota, not a rate. This is deliberately a
+    SEPARATE, coarser signal from throughput() above — a manager-facing
+    weekly report wants "did they hit the number," which a pace
+    calculation doesn't directly answer (someone can work fast in short
+    bursts and still miss a volume target)."""
+    pct = round(100 * count / target, 1) if target else 0.0
+    return ("on_track" if count >= target else "behind"), pct
+
+
 def compare_to_baseline(current, baseline, drop_threshold=0.25):
     """Has this person's pace dropped meaningfully versus their own past
     baseline? Comparing someone to their OWN history, not to a team

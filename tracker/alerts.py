@@ -12,6 +12,8 @@ import json
 import os
 import urllib.request
 
+from tracker.metrics import status_vs_target
+
 
 def send(message, webhook_url=None):
     url = webhook_url or os.environ.get("SLACK_WEBHOOK_URL")
@@ -30,19 +32,32 @@ def send(message, webhook_url=None):
         return False
 
 
-def format_daily_summary(team_metrics, drops):
-    """team_metrics: {person: metrics dict}. drops: {person: pct_drop}
-    for anyone flagged against their own baseline."""
-    lines = ["*Daily throughput summary*"]
+DIVIDER = "━" * 24
+
+
+def format_weekly_report(team_metrics, week_label, target=100, drops=None):
+    """Matches the real Slack message this generalizes: a status emoji
+    and "behind/on track" label per person, each against a flat weekly
+    quota, then a team total. Deliberately simple and scannable in a
+    phone notification — a manager reading this on their phone needs the
+    answer in the first two words of each line, not in a table.
+    """
+    drops = drops or {}
+    lines = [":bar_chart: *Weekly Performance Report*",
+            ":date: %s" % week_label, DIVIDER]
+
+    behind, on_track, total = [], [], 0
     for person, m in sorted(team_metrics.items()):
-        if not m:
-            lines.append("• %s: no activity today" % person)
-            continue
-        flag = " ⚠️ down %.0f%% vs baseline" % drops[person] if person in drops else ""
-        lines.append("• %s: %.0f/hr, %.0f items, %.1fh active%s"
-                     % (person, m["items_per_hour"], m["items"], m["active_hours"], flag))
-    if drops:
-        lines.append("\n_%d team member(s) below their usual pace — may be worth a check-in,"
-                     " not a problem on its own (meetings, a hard task, a bad day)._"
-                     % len(drops))
+        count = m["items"] if m else 0
+        total += count
+        status, pct = status_vs_target(count, target)
+        line = "%s %s %s: %d rows (target: %d, %.1f%%)" % (
+            ":red_circle:" if status == "behind" else ":white_check_mark:",
+            "Behind" if status == "behind" else "On Track", person, count, target, pct)
+        if person in drops:
+            line += "  ⚠️ down %.0f%% vs own baseline" % drops[person]
+        (behind if status == "behind" else on_track).append(line)
+    lines += behind + on_track
+    lines.append(DIVIDER)
+    lines.append(":checkered_flag: *Team Total:* %d rows where coordinators worked" % total)
     return "\n".join(lines)
