@@ -1,0 +1,4 @@
+# No third-party dependencies for the core — metrics.py, alerts.py and
+# report.py use only the standard library. This file exists for the
+# demo-data generator's determinism and the test runner, both of which
+# are also stdlib-only; kept for clarity if that changes later.

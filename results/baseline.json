@@ -1,0 +1,29 @@
+{
+  "Alex Rivera": {
+    "items": 35,
+    "days_worked": 1,
+    "mean_per_day": 35.0,
+    "active_hours": 1.0,
+    "median_gap_seconds": 112.3,
+    "items_per_hour": 32.1,
+    "projected_full_day": 208.5
+  },
+  "Jordan Lee": {
+    "items": 35,
+    "days_worked": 1,
+    "mean_per_day": 35.0,
+    "active_hours": 0.9,
+    "median_gap_seconds": 93.5,
+    "items_per_hour": 38.5,
+    "projected_full_day": 250.2
+  },
+  "Sam Park": {
+    "items": 35,
+    "days_worked": 1,
+    "mean_per_day": 35.0,
+    "active_hours": 3.4,
+    "median_gap_seconds": 352.6,
+    "items_per_hour": 10.2,
+    "projected_full_day": 66.4
+  }
+}
